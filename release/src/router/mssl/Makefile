@@ -1,42 +1,15 @@
-include ../common.mak
+.PHONY: all clean install build uninstall
+all: build
 
-CFLAGS	= -Os -Wall $(EXTRACFLAGS) -fPIC 
-LIBS = 
-LDFLAGS	= 
+BINDIR ?= /usr/bin
 
-CFLAGS	+= -I$(TOP)/openssl/include
-LIBS += -L$(TOP)/openssl -lssl -lcrypto
+export OCAMLRUNPARAM=b
 
-LIBS += -lpthread
-OBJ = mssl.o
+build: dist/setup
+	obuild build
 
-all: libmssl.so libmssl.a
-
-libmssl.so: $(OBJ)
-	$(CC) -shared -o $@ $^ $(LIBS)
-	$(STRIP) $@
-	$(CPTMP)
-
-libmssl.a: $(OBJ)
-	rm -f $@
-	$(AR) cruv $@ $^
+dist/setup: mssl.obuild
+	obuild configure
 
 clean:
-	rm -f .*.depend *.o *.so *.a
-
-install: all
-	@echo " [mssl] Installing..."
-	install -D libmssl.so $(INSTALLDIR)/usr/lib/libmssl.so
-	$(STRIP) $(INSTALLDIR)/usr/lib/libmssl.so
-
-%.o: %.c .%.depend
-	@echo " [mssl] CC $@"
-	@$(CC) $(CFLAGS) -c $<
-
-.depend: $(OBJS:%.o=%.c)
-	@$(CC) $(CFLAGS) -M $^ > .depend
-
-.%.depend: %.c
-	@$(CC) $(CFLAGS) -M $< > $@
-
--include $(OBJS:%.o=.%.depend)
+	@obuild clean
