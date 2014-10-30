@@ -2,7 +2,7 @@
 #
 # Copyright (C) 1999-2005 by Erik Andersen <andersen@codepoet.org>
 #
-# Licensed under the GPL v2, see the file LICENSE in this tarball.
+# Licensed under GPLv2, see file LICENSE in this source tree.
 
 lib-y:=
 
@@ -12,7 +12,7 @@ lib-$(CONFIG_BLKID)                             += get_devname.o
 lib-$(CONFIG_FINDFS)                            += get_devname.o
 lib-$(CONFIG_FEATURE_MOUNT_LABEL)               += get_devname.o
 
-lib-$(CONFIG_VOLUMEID)                          += volume_id.o util.o util2.o
+lib-$(CONFIG_VOLUMEID)                          += volume_id.o util.o
 lib-$(CONFIG_FEATURE_VOLUMEID_BTRFS)            += btrfs.o
 lib-$(CONFIG_FEATURE_VOLUMEID_EXT)              += ext.o
 lib-$(CONFIG_FEATURE_VOLUMEID_FAT)              += fat.o

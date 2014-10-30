@@ -157,12 +157,12 @@ static int MS_CALLBACK callb(int ok, X509_STORE_CTX *ctx);
 static int sign (X509 *x, EVP_PKEY *pkey,int days,int clrext, const EVP_MD *digest,
 						CONF *conf, char *section);
 static int x509_certify (X509_STORE *ctx,char *CAfile,const EVP_MD *digest,
-			 X509 *x,X509 *xca,EVP_PKEY *pkey,char *serial,
-			 int create,int days, int clrext, CONF *conf, char *section,
-						ASN1_INTEGER *sno);
+			 X509 *x,X509 *xca,EVP_PKEY *pkey,
+			 STACK_OF(OPENSSL_STRING) *sigopts,
+			 char *serial, int create ,int days, int clrext,
+			 CONF *conf, char *section, ASN1_INTEGER *sno);
 static int purpose_print(BIO *bio, X509 *cert, X509_PURPOSE *pt);
 static int reqfile=0;
-static time_t setstartsecs=0;
 
 int MAIN(int, char **);
 
@@ -173,6 +173,7 @@ int MAIN(int argc, char **argv)
 	X509_REQ *req=NULL;
 	X509 *x=NULL,*xca=NULL;
 	ASN1_OBJECT *objtmp;
+	STACK_OF(OPENSSL_STRING) *sigopts = NULL;
 	EVP_PKEY *Upkey=NULL,*CApkey=NULL;
 	ASN1_INTEGER *sno = NULL;
 	int i,num,badops=0;
@@ -272,13 +273,22 @@ int MAIN(int argc, char **argv)
 			if (--argc < 1) goto bad;
 			CAkeyformat=str2fmt(*(++argv));
 			}
+		else if (strcmp(*argv,"-sigopt") == 0)
+			{
+			if (--argc < 1)
+				goto bad;
+			if (!sigopts)
+				sigopts = sk_OPENSSL_STRING_new_null();
+			if (!sigopts || !sk_OPENSSL_STRING_push(sigopts, *(++argv)))
+				goto bad;
+			}
 		else if (strcmp(*argv,"-days") == 0)
 			{
 			if (--argc < 1) goto bad;
 			days=atoi(*(++argv));
 			if (days == 0)
 				{
-				BIO_printf(STDout,"bad number of days\n");
+				BIO_printf(bio_err,"bad number of days\n");
 				goto bad;
 				}
 			}
@@ -368,11 +378,6 @@ int MAIN(int argc, char **argv)
 			if (--argc < 1) goto bad;
 			alias= *(++argv);
 			trustout = 1;
-			}
-		else if (strcmp(*argv,"-setstartsecs") == 0)
-			{
-			if (--argc < 1) goto bad;
-			setstartsecs = atol(*(++argv));
 			}
 		else if (strcmp(*argv,"-certopt") == 0)
 			{
@@ -907,7 +912,7 @@ bad:
 				}
 			else if (text == i)
 				{
-				X509_print_ex(out,x,nmflag, certflag);
+				X509_print_ex(STDout,x,nmflag, certflag);
 				}
 			else if (startdate == i)
 				{
@@ -976,7 +981,8 @@ bad:
 				
 				assert(need_rand);
 				if (!x509_certify(ctx,CAfile,digest,x,xca,
-					CApkey, CAserial,CA_createserial,days, clrext,
+					CApkey, sigopts,
+					CAserial,CA_createserial,days, clrext,
 					extconf, extsect, sno))
 					goto end;
 				}
@@ -1087,6 +1093,8 @@ end:
 	X509_free(xca);
 	EVP_PKEY_free(Upkey);
 	EVP_PKEY_free(CApkey);
+	if (sigopts)
+		sk_OPENSSL_STRING_free(sigopts);
 	X509_REQ_free(rq);
 	ASN1_INTEGER_free(sno);
 	sk_ASN1_OBJECT_pop_free(trust, ASN1_OBJECT_free);
@@ -1137,8 +1145,11 @@ static ASN1_INTEGER *x509_load_serial(char *CAfile, char *serialfile, int create
 	}
 
 static int x509_certify(X509_STORE *ctx, char *CAfile, const EVP_MD *digest,
-	     X509 *x, X509 *xca, EVP_PKEY *pkey, char *serialfile, int create,
-	     int days, int clrext, CONF *conf, char *section, ASN1_INTEGER *sno)
+	     		X509 *x, X509 *xca, EVP_PKEY *pkey,
+			STACK_OF(OPENSSL_STRING) *sigopts,
+	  		char *serialfile, int create,
+	     		int days, int clrext, CONF *conf, char *section,
+			ASN1_INTEGER *sno)
 	{
 	int ret=0;
 	ASN1_INTEGER *bs=NULL;
@@ -1197,7 +1208,8 @@ static int x509_certify(X509_STORE *ctx, char *CAfile, const EVP_MD *digest,
                 if (!X509V3_EXT_add_nconf(conf, &ctx2, section, x)) goto end;
 		}
 
-	if (!X509_sign(x,pkey,digest)) goto end;
+	if (!do_X509_sign(bio_err, x, pkey, digest, sigopts))
+		goto end;
 	ret=1;
 end:
 	X509_STORE_CTX_cleanup(&xsc);
@@ -1251,30 +1263,14 @@ static int sign(X509 *x, EVP_PKEY *pkey, int days, int clrext, const EVP_MD *dig
 	EVP_PKEY_free(pktmp);
 
 	if (!X509_set_issuer_name(x,X509_get_subject_name(x))) goto err;
+	if (X509_gmtime_adj(X509_get_notBefore(x),0) == NULL) goto err;
 
-	if(setstartsecs) {
-		struct tm *tmnow;
-		char buf[100];
+	/* Lets just make it 12:00am GMT, Jan 1 1970 */
+	/* memcpy(x->cert_info->validity->notBefore,"700101120000Z",13); */
+	/* 28 days to be certified */
 
-		tmnow = localtime(&setstartsecs);
-		snprintf(buf, sizeof(buf), "%02d%02d%02d%02d%02d%02dZ",
-			tmnow->tm_year%100, tmnow->tm_mon+1, tmnow->tm_mday,
-			tmnow->tm_hour, tmnow->tm_min, tmnow->tm_sec);
-		if (!ASN1_UTCTIME_set_string(X509_get_notBefore(x), buf)) goto err;
-
-		if (X509_time_adj(X509_get_notAfter(x), (long)60*60*24*days, &setstartsecs) == NULL)
-			goto err;
-	}
-	else {
-		if (X509_gmtime_adj(X509_get_notBefore(x),0) == NULL) goto err;
-
-		/* Lets just make it 12:00am GMT, Jan 1 1970 */
-		/* memcpy(x->cert_info->validity->notBefore,"700101120000Z",13); */
-		/* 28 days to be certified */
-
-		if (X509_gmtime_adj(X509_get_notAfter(x),(long)60*60*24*days) == NULL)
-			goto err;
-	}
+	if (X509_gmtime_adj(X509_get_notAfter(x),(long)60*60*24*days) == NULL)
+		goto err;
 
 	if (!X509_set_pubkey(x,pkey)) goto err;
 	if (clrext)

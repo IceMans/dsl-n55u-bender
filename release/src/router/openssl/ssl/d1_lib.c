@@ -82,6 +82,7 @@ SSL3_ENC_METHOD DTLSv1_enc_data={
 	TLS_MD_CLIENT_FINISH_CONST,TLS_MD_CLIENT_FINISH_CONST_SIZE,
 	TLS_MD_SERVER_FINISH_CONST,TLS_MD_SERVER_FINISH_CONST_SIZE,
 	tls1_alert_code,
+	tls1_export_keying_material,
 	};
 
 long dtls1_default_timeout(void)
@@ -175,9 +176,12 @@ static void dtls1_clear_queues(SSL *s)
 
 	while ( (item = pqueue_pop(s->d1->buffered_app_data.q)) != NULL)
 		{
-		frag = (hm_fragment *)item->data;
-		OPENSSL_free(frag->fragment);
-		OPENSSL_free(frag);
+		rdata = (DTLS1_RECORD_DATA *) item->data;
+		if (rdata->rbuf.buf)
+			{
+			OPENSSL_free(rdata->rbuf.buf);
+			}
+		OPENSSL_free(item->data);
 		pitem_free(item);
 		}
 	}
@@ -195,6 +199,7 @@ void dtls1_free(SSL *s)
 	pqueue_free(s->d1->buffered_app_data.q);
 
 	OPENSSL_free(s->d1);
+	s->d1 = NULL;
 	}
 
 void dtls1_clear(SSL *s)
@@ -261,6 +266,16 @@ long dtls1_ctrl(SSL *s, int cmd, long larg, void *parg)
 	case DTLS_CTRL_LISTEN:
 		ret = dtls1_listen(s, parg);
 		break;
+	case SSL_CTRL_CHECK_PROTO_VERSION:
+		/* For library-internal use; checks that the current protocol
+		 * is the highest enabled version (according to s->ctx->method,
+		 * as version negotiation may have changed s->method). */
+#if DTLS_MAX_VERSION != DTLS1_VERSION
+#  error Code needs update for DTLS_method() support beyond DTLS1_VERSION.
+#endif
+		/* Just one protocol version is supported so far;
+		 * fail closed if the version is not as expected. */
+		return s->version == DTLS_MAX_VERSION;
 
 	default:
 		ret = ssl3_ctrl(s, cmd, larg, parg);
@@ -291,6 +306,15 @@ const SSL_CIPHER *dtls1_get_cipher(unsigned int u)
 
 void dtls1_start_timer(SSL *s)
 	{
+#ifndef OPENSSL_NO_SCTP
+	/* Disable timer for SCTP */
+	if (BIO_dgram_is_sctp(SSL_get_wbio(s)))
+		{
+		memset(&(s->d1->next_timeout), 0, sizeof(struct timeval));
+		return;
+		}
+#endif
+
 	/* If timer is not set, initialize duration with 1 second */
 	if (s->d1->next_timeout.tv_sec == 0 && s->d1->next_timeout.tv_usec == 0)
 		{
@@ -427,6 +451,14 @@ int dtls1_handle_timeout(SSL *s)
 		{
 		s->d1->timeout.read_timeouts = 1;
 		}
+
+#ifndef OPENSSL_NO_HEARTBEATS
+	if (s->tlsext_hb_pending)
+		{
+		s->tlsext_hb_pending = 0;
+		return dtls1_heartbeat(s);
+		}
+#endif
 
 	dtls1_start_timer(s);
 	return dtls1_retransmit_buffered_messages(s);

@@ -61,7 +61,10 @@ ENGINETEST=	enginetest
 EVPTEST=	evp_test
 IGETEST=	igetest
 JPAKETEST=	jpaketest
+SRPTEST=	srptest
 ASN1TEST=	asn1test
+HEARTBEATTEST=  heartbeat_test
+CONSTTIMETEST=  constant_time_test
 
 TESTS=		alltests
 
@@ -72,8 +75,8 @@ EXE=	$(BNTEST)$(EXE_EXT) $(ECTEST)$(EXE_EXT)  $(ECDSATEST)$(EXE_EXT) $(ECDHTEST)
 	$(MDC2TEST)$(EXE_EXT) $(RMDTEST)$(EXE_EXT) \
 	$(RANDTEST)$(EXE_EXT) $(DHTEST)$(EXE_EXT) $(ENGINETEST)$(EXE_EXT) \
 	$(BFTEST)$(EXE_EXT) $(CASTTEST)$(EXE_EXT) $(SSLTEST)$(EXE_EXT) $(EXPTEST)$(EXE_EXT) $(DSATEST)$(EXE_EXT) $(RSATEST)$(EXE_EXT) \
-	$(EVPTEST)$(EXE_EXT) $(IGETEST)$(EXE_EXT) $(JPAKETEST)$(EXE_EXT) \
-	$(ASN1TEST)$(EXE_EXT)
+	$(EVPTEST)$(EXE_EXT) $(IGETEST)$(EXE_EXT) $(JPAKETEST)$(EXE_EXT) $(SRPTEST)$(EXE_EXT) \
+	$(ASN1TEST)$(EXE_EXT) $(HEARTBEATTEST)$(EXE_EXT) $(CONSTTIMETEST)$(EXE_EXT)
 
 # $(METHTEST)$(EXE_EXT)
 
@@ -85,7 +88,9 @@ OBJ=	$(BNTEST).o $(ECTEST).o  $(ECDSATEST).o $(ECDHTEST).o $(IDEATEST).o \
 	$(MDC2TEST).o $(RMDTEST).o \
 	$(RANDTEST).o $(DHTEST).o $(ENGINETEST).o $(CASTTEST).o \
 	$(BFTEST).o  $(SSLTEST).o  $(DSATEST).o  $(EXPTEST).o $(RSATEST).o \
-	$(EVPTEST).o $(IGETEST).o $(JPAKETEST).o $(ASN1TEST).o
+	$(EVPTEST).o $(IGETEST).o $(JPAKETEST).o $(ASN1TEST).o \
+	$(HEARTBEATTEST).o $(CONSTTIMETEST).o
+
 SRC=	$(BNTEST).c $(ECTEST).c  $(ECDSATEST).c $(ECDHTEST).c $(IDEATEST).c \
 	$(MD2TEST).c  $(MD4TEST).c $(MD5TEST).c \
 	$(HMACTEST).c $(WPTEST).c \
@@ -93,7 +98,8 @@ SRC=	$(BNTEST).c $(ECTEST).c  $(ECDSATEST).c $(ECDHTEST).c $(IDEATEST).c \
 	$(DESTEST).c $(SHATEST).c $(SHA1TEST).c $(MDC2TEST).c $(RMDTEST).c \
 	$(RANDTEST).c $(DHTEST).c $(ENGINETEST).c $(CASTTEST).c \
 	$(BFTEST).c  $(SSLTEST).c $(DSATEST).c   $(EXPTEST).c $(RSATEST).c \
-	$(EVPTEST).c $(IGETEST).c $(JPAKETEST).c $(ASN1TEST).c
+	$(EVPTEST).c $(IGETEST).c $(JPAKETEST).c $(SRPTEST).c $(ASN1TEST).c \
+	$(HEARTBEATTEST).c $(CONSTTIMETEST).c
 
 EXHEADER= 
 HEADER=	$(EXHEADER)
@@ -136,7 +142,7 @@ alltests: \
 	test_enc test_x509 test_rsa test_crl test_sid \
 	test_gen test_req test_pkcs7 test_verify test_dh test_dsa \
 	test_ss test_ca test_engine test_evp test_ssl test_tsa test_ige \
-	test_jpake test_cms
+	test_jpake test_srp test_cms test_heartbeat test_constant_time
 
 test_evp:
 	../util/shlib_wrap.sh ./$(EVPTEST) evptests.txt
@@ -226,7 +232,7 @@ test_bn:
 	@../util/shlib_wrap.sh ./$(BNTEST) >tmp.bntest
 	@echo quit >>tmp.bntest
 	@echo "running bc"
-	@<tmp.bntest sh -c "`sh ./bctest ignore`" | $(PERL) -e '$$i=0; while (<STDIN>) {if (/^test (.*)/) {print STDERR "\nverify $$1";} elsif (!/^0$$/) {die "\nFailed! bc: $$_";} else {print STDERR "."; $$i++;}} print STDERR "\n$$i tests passed\n"'
+	@<tmp.bntest sh -c "`sh ./bctest ignore`" | $(PERL) -e '$$i=0; while (<STDIN>) {if (/^test (.*)/) {print STDERR "\nverify $$1";} elsif (!/^0\r?$$/) {die "\nFailed! bc: $$_";} else {print STDERR "."; $$i++;}} print STDERR "\n$$i tests passed\n"'
 	@echo 'test a^b%c implementations'
 	../util/shlib_wrap.sh ./$(EXPTEST)
 
@@ -245,7 +251,7 @@ test_ecdh:
 test_verify:
 	@echo "The following command should have some OK's and some failures"
 	@echo "There are definitly a few expired certificates"
-	../util/shlib_wrap.sh ../apps/openssl verify -CApath ../certs ../certs/*.pem
+	../util/shlib_wrap.sh ../apps/openssl verify -CApath ../certs/demo ../certs/demo/*.pem
 
 test_dh:
 	@echo "Generate a set of DH parameters"
@@ -274,6 +280,9 @@ test_engine:
 test_ssl: keyU.ss certU.ss certCA.ss certP1.ss keyP1.ss certP2.ss keyP2.ss \
 		intP1.ss intP2.ss
 	@echo "test SSL protocol"
+	@if [ -n "$(FIPSCANLIB)" ]; then \
+	  sh ./testfipsssl keyU.ss certU.ss certCA.ss; \
+	fi
 	../util/shlib_wrap.sh ./$(SSLTEST) -test_cipherlist
 	@sh ./testssl keyU.ss certU.ss certCA.ss
 	@sh ./testsslproxy keyP1.ss certP1.ss intP1.ss
@@ -310,6 +319,17 @@ test_cms:
 	@echo "CMS consistency test"
 	$(PERL) cms-test.pl
 
+test_srp: $(SRPTEST)$(EXE_EXT)
+	@echo "Test SRP"
+	../util/shlib_wrap.sh ./srptest
+
+test_heartbeat: $(HEARTBEATTEST)$(EXE_EXT)
+	../util/shlib_wrap.sh ./$(HEARTBEATTEST)
+
+test_constant_time: $(CONSTTIMETEST)$(EXE_EXT)
+	@echo "Test constant time utilites"
+	../util/shlib_wrap.sh ./$(CONSTTIMETEST)
+
 lint:
 	lint -DLINT $(INCLUDES) $(SRC)>fluff
 
@@ -339,6 +359,25 @@ BUILD_CMD=shlib_target=; if [ -n "$(SHARED_LIBS)" ]; then \
 		shlib_target="$(SHLIB_TARGET)"; \
 	fi; \
 	LIBRARIES="$(LIBSSL) $(LIBCRYPTO) $(LIBKRB5)"; \
+	$(MAKE) -f $(TOP)/Makefile.shared -e \
+		CC="$${CC}" APPNAME=$$target$(EXE_EXT) OBJECTS="$$target.o" \
+		LIBDEPS="$(PEX_LIBS) $$LIBRARIES $(EX_LIBS)" \
+		link_app.$${shlib_target}
+
+FIPS_BUILD_CMD=shlib_target=; if [ -n "$(SHARED_LIBS)" ]; then \
+		shlib_target="$(SHLIB_TARGET)"; \
+	fi; \
+	LIBRARIES="$(LIBSSL) $(LIBCRYPTO) $(LIBKRB5)"; \
+	if [ -z "$(SHARED_LIBS)" -a -n "$(FIPSCANLIB)" ] ; then \
+		FIPSLD_CC="$(CC)"; CC=$(FIPSDIR)/bin/fipsld; export CC FIPSLD_CC; \
+	fi; \
+	$(MAKE) -f $(TOP)/Makefile.shared -e \
+		CC="$${CC}" APPNAME=$$target$(EXE_EXT) OBJECTS="$$target.o" \
+		LIBDEPS="$(PEX_LIBS) $$LIBRARIES $(EX_LIBS)" \
+		link_app.$${shlib_target}
+
+BUILD_CMD_STATIC=shlib_target=; \
+	LIBRARIES="$(DLIBSSL) $(DLIBCRYPTO) $(LIBKRB5)"; \
 	$(MAKE) -f $(TOP)/Makefile.shared -e \
 		APPNAME=$$target$(EXE_EXT) OBJECTS="$$target.o" \
 		LIBDEPS="$(PEX_LIBS) $$LIBRARIES $(EX_LIBS)" \
@@ -423,7 +462,7 @@ $(METHTEST)$(EXE_EXT): $(METHTEST).o $(DLIBCRYPTO)
 	@target=$(METHTEST); $(BUILD_CMD)
 
 $(SSLTEST)$(EXE_EXT): $(SSLTEST).o $(DLIBSSL) $(DLIBCRYPTO)
-	@target=$(SSLTEST); $(BUILD_CMD)
+	@target=$(SSLTEST); $(FIPS_BUILD_CMD)
 
 $(ENGINETEST)$(EXE_EXT): $(ENGINETEST).o $(DLIBCRYPTO)
 	@target=$(ENGINETEST); $(BUILD_CMD)
@@ -445,6 +484,15 @@ $(JPAKETEST)$(EXE_EXT): $(JPAKETEST).o $(DLIBCRYPTO)
 
 $(ASN1TEST)$(EXE_EXT): $(ASN1TEST).o $(DLIBCRYPTO)
 	@target=$(ASN1TEST); $(BUILD_CMD)
+
+$(SRPTEST)$(EXE_EXT): $(SRPTEST).o $(DLIBCRYPTO)
+	@target=$(SRPTEST); $(BUILD_CMD)
+
+$(HEARTBEATTEST)$(EXE_EXT): $(HEARTBEATTEST).o $(DLIBCRYPTO)
+	@target=$(HEARTBEATTEST); $(BUILD_CMD_STATIC)
+
+$(CONSTTIMETEST)$(EXE_EXT): $(CONSTTIMETEST).o
+	@target=$(CONSTTIMETEST) $(BUILD_CMD)
 
 #$(AESTEST).o: $(AESTEST).c
 #	$(CC) -c $(CFLAGS) -DINTERMEDIATE_VALUE_KAT -DTRACE_KAT_MCT $(AESTEST).c
@@ -491,6 +539,9 @@ bntest.o: ../include/openssl/stack.h ../include/openssl/symhacks.h
 bntest.o: ../include/openssl/x509.h ../include/openssl/x509_vfy.h bntest.c
 casttest.o: ../e_os.h ../include/openssl/cast.h ../include/openssl/e_os2.h
 casttest.o: ../include/openssl/opensslconf.h casttest.c
+constant_time_test.o: ../crypto/constant_time_locl.h ../e_os.h
+constant_time_test.o: ../include/openssl/e_os2.h
+constant_time_test.o: ../include/openssl/opensslconf.h constant_time_test.c
 destest.o: ../include/openssl/des.h ../include/openssl/des_old.h
 destest.o: ../include/openssl/e_os2.h ../include/openssl/opensslconf.h
 destest.o: ../include/openssl/ossl_typ.h ../include/openssl/safestack.h
@@ -581,6 +632,27 @@ exptest.o: ../include/openssl/opensslconf.h ../include/openssl/opensslv.h
 exptest.o: ../include/openssl/ossl_typ.h ../include/openssl/rand.h
 exptest.o: ../include/openssl/safestack.h ../include/openssl/stack.h
 exptest.o: ../include/openssl/symhacks.h exptest.c
+heartbeat_test.o: ../e_os.h ../include/openssl/asn1.h ../include/openssl/bio.h
+heartbeat_test.o: ../include/openssl/buffer.h ../include/openssl/comp.h
+heartbeat_test.o: ../include/openssl/crypto.h ../include/openssl/dsa.h
+heartbeat_test.o: ../include/openssl/dtls1.h ../include/openssl/e_os2.h
+heartbeat_test.o: ../include/openssl/ec.h ../include/openssl/ecdh.h
+heartbeat_test.o: ../include/openssl/ecdsa.h ../include/openssl/err.h
+heartbeat_test.o: ../include/openssl/evp.h ../include/openssl/hmac.h
+heartbeat_test.o: ../include/openssl/kssl.h ../include/openssl/lhash.h
+heartbeat_test.o: ../include/openssl/obj_mac.h ../include/openssl/objects.h
+heartbeat_test.o: ../include/openssl/opensslconf.h
+heartbeat_test.o: ../include/openssl/opensslv.h ../include/openssl/ossl_typ.h
+heartbeat_test.o: ../include/openssl/pem.h ../include/openssl/pem2.h
+heartbeat_test.o: ../include/openssl/pkcs7.h ../include/openssl/pqueue.h
+heartbeat_test.o: ../include/openssl/rsa.h ../include/openssl/safestack.h
+heartbeat_test.o: ../include/openssl/sha.h ../include/openssl/srtp.h
+heartbeat_test.o: ../include/openssl/ssl.h ../include/openssl/ssl2.h
+heartbeat_test.o: ../include/openssl/ssl23.h ../include/openssl/ssl3.h
+heartbeat_test.o: ../include/openssl/stack.h ../include/openssl/symhacks.h
+heartbeat_test.o: ../include/openssl/tls1.h ../include/openssl/x509.h
+heartbeat_test.o: ../include/openssl/x509_vfy.h ../ssl/ssl_locl.h
+heartbeat_test.o: ../test/testutil.h heartbeat_test.c
 hmactest.o: ../e_os.h ../include/openssl/asn1.h ../include/openssl/bio.h
 hmactest.o: ../include/openssl/crypto.h ../include/openssl/e_os2.h
 hmactest.o: ../include/openssl/evp.h ../include/openssl/hmac.h
@@ -669,6 +741,13 @@ shatest.o: ../include/openssl/objects.h ../include/openssl/opensslconf.h
 shatest.o: ../include/openssl/opensslv.h ../include/openssl/ossl_typ.h
 shatest.o: ../include/openssl/safestack.h ../include/openssl/sha.h
 shatest.o: ../include/openssl/stack.h ../include/openssl/symhacks.h shatest.c
+srptest.o: ../include/openssl/bio.h ../include/openssl/bn.h
+srptest.o: ../include/openssl/crypto.h ../include/openssl/e_os2.h
+srptest.o: ../include/openssl/err.h ../include/openssl/lhash.h
+srptest.o: ../include/openssl/opensslconf.h ../include/openssl/opensslv.h
+srptest.o: ../include/openssl/ossl_typ.h ../include/openssl/rand.h
+srptest.o: ../include/openssl/safestack.h ../include/openssl/srp.h
+srptest.o: ../include/openssl/stack.h ../include/openssl/symhacks.h srptest.c
 ssltest.o: ../e_os.h ../include/openssl/asn1.h ../include/openssl/bio.h
 ssltest.o: ../include/openssl/bn.h ../include/openssl/buffer.h
 ssltest.o: ../include/openssl/comp.h ../include/openssl/conf.h
@@ -685,7 +764,8 @@ ssltest.o: ../include/openssl/ossl_typ.h ../include/openssl/pem.h
 ssltest.o: ../include/openssl/pem2.h ../include/openssl/pkcs7.h
 ssltest.o: ../include/openssl/pqueue.h ../include/openssl/rand.h
 ssltest.o: ../include/openssl/rsa.h ../include/openssl/safestack.h
-ssltest.o: ../include/openssl/sha.h ../include/openssl/ssl.h
+ssltest.o: ../include/openssl/sha.h ../include/openssl/srp.h
+ssltest.o: ../include/openssl/srtp.h ../include/openssl/ssl.h
 ssltest.o: ../include/openssl/ssl2.h ../include/openssl/ssl23.h
 ssltest.o: ../include/openssl/ssl3.h ../include/openssl/stack.h
 ssltest.o: ../include/openssl/symhacks.h ../include/openssl/tls1.h

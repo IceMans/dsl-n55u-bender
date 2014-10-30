@@ -611,7 +611,7 @@ int CMS_decrypt_set1_pkey(CMS_ContentInfo *cms, EVP_PKEY *pk, X509 *cert)
 	STACK_OF(CMS_RecipientInfo) *ris;
 	CMS_RecipientInfo *ri;
 	int i, r;
-	int debug = 0;
+	int debug = 0, ri_match = 0;
 	ris = CMS_get0_RecipientInfos(cms);
 	if (ris)
 		debug = cms->d.envelopedData->encryptedContentInfo->debug;
@@ -620,6 +620,7 @@ int CMS_decrypt_set1_pkey(CMS_ContentInfo *cms, EVP_PKEY *pk, X509 *cert)
 		ri = sk_CMS_RecipientInfo_value(ris, i);
 		if (CMS_RecipientInfo_type(ri) != CMS_RECIPINFO_TRANS)
 				continue;
+		ri_match = 1;
 		/* If we have a cert try matching RecipientInfo
 		 * otherwise try them all.
 		 */
@@ -655,7 +656,7 @@ int CMS_decrypt_set1_pkey(CMS_ContentInfo *cms, EVP_PKEY *pk, X509 *cert)
 			}
 		}
 	/* If no cert and not debugging always return success */
-	if (!cert && !debug)
+	if (ri_match && !cert && !debug)
 		{
 		ERR_clear_error();
 		return 1;
@@ -701,6 +702,30 @@ int CMS_decrypt_set1_key(CMS_ContentInfo *cms,
 		}
 
 	CMSerr(CMS_F_CMS_DECRYPT_SET1_KEY, CMS_R_NO_MATCHING_RECIPIENT);
+	return 0;
+
+	}
+
+int CMS_decrypt_set1_password(CMS_ContentInfo *cms, 
+				unsigned char *pass, ossl_ssize_t passlen)
+	{
+	STACK_OF(CMS_RecipientInfo) *ris;
+	CMS_RecipientInfo *ri;
+	int i, r;
+	ris = CMS_get0_RecipientInfos(cms);
+	for (i = 0; i < sk_CMS_RecipientInfo_num(ris); i++)
+		{
+		ri = sk_CMS_RecipientInfo_value(ris, i);
+		if (CMS_RecipientInfo_type(ri) != CMS_RECIPINFO_PASS)
+				continue;
+		CMS_RecipientInfo_set0_password(ri, pass, passlen);
+		r = CMS_RecipientInfo_decrypt(cms, ri);
+		CMS_RecipientInfo_set0_password(ri, NULL, 0);
+		if (r > 0)
+			return 1;
+		}
+
+	CMSerr(CMS_F_CMS_DECRYPT_SET1_PASSWORD, CMS_R_NO_MATCHING_RECIPIENT);
 	return 0;
 
 	}
