@@ -10,12 +10,15 @@ The main purpose of the project is to create new lightweight version of the firm
 
 Any support/feedback is always welcome!
 
+First I would like to say a big thank you to matteocrippa for still having the code up for me to play around with
+
 ==============
-Current Status - (Discontinued, feel free to start using the code to continue this work!)
+Current Status - In Dev
 ==============
 
-_v.1.0.0.0.2 alpha_
-_Rewriting HTML gui in order to decrease www data size._
+_v.1.0.0.0.2 - Alpha
+
+TODO: Update Openssl, lighthttpd, Openvpn and busybox plus lots more.
 
 ==============
 Screenshots:
