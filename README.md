@@ -10,7 +10,8 @@ The main purpose of the project is to create new lightweight version of the firm
 
 Any support/feedback is always welcome!
 
-First I would like to say a big thank you to matteocrippa for still having the code up for me to play around with
+First I would like to say a big thank you to matteocrippa for still having the code up for me to play around with.
+Second I hope people can make use of this seeing as I have Asus DSL-N55U and wanted something more from it ;).
 
 ==============
 Current Status - In Dev
@@ -18,7 +19,9 @@ Current Status - In Dev
 
 _v.1.0.0.0.2 - Alpha
 
-TODO: Update Openssl, lighthttpd, Openvpn and busybox plus lots more.
+Done: Update Openssl, lighthttpd, Openvpn and busybox.
+
+TODO: Update core Library's  , Take a look at the web interface ( Possible recode? ), Add a debug like console in the web UI? and look at the security side of things.
 
 ==============
 Screenshots:
@@ -47,4 +50,6 @@ Donations
 
 This work is free of any charge, but if you want to donate for a beer or a coffee feel free to do it!
 
-`Bitcoin: 1BWmKKaDzyvVqNQgZNUWV7rcU91MMqPAXT`
+`Bitcoin: 1BWmKKaDzyvVqNQgZNUWV7rcU91MMqPAXT` Original Coder	
+
+`Bitcoin: 19mUB9HsvRaiLJE2uHQFgJR65RsjyVzfU2` Current Development 
